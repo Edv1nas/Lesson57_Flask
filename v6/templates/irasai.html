@@ -2,6 +2,40 @@
 
 {% block content %}
 
-<h1>Čia yra vartotojo {{ current_user.vardas}} įrašai</h1>
+<h2>Sukurti naują išlaidų įrašą</h2>
 
-{% endblock %}
+<form method="POST" action="{{ url_for('add_record') }}">
+    {{ form.csrf_token }}
+  
+    <!-- Display form validation errors -->
+    {% for error in form.errors %}
+      <div class="error">{{ error }}</div>
+    {% endfor %}
+  
+    <!-- Display individual form fields -->
+    <div>
+      <div>
+        <label for="{{ form.expenses_name.id }}">{{ form.expenses_name.label }}</label>
+        {{ form.expenses_name }}
+        <!-- Display field validation errors -->
+        {% for error in form.expenses_name.errors %}
+          <div class="error">{{ error }}</div>
+        {% endfor %}
+      </div>
+  
+      <div>
+        <label for="{{ form.cost.id }}">{{ form.cost.label }}</label>
+        {{ form.cost }}
+        <!-- Display field validation errors -->
+        {% for error in form.cost.errors %}
+          <div class="error">{{ error }}</div>
+        {% endfor %}
+      </div>
+    </div>
+  
+    <div class="form-group">
+        {{ form.submit(class="btn btn-outline-info") }}
+    </div>
+  </form>
+
+  {% endblock %}

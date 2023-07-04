@@ -4,6 +4,31 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_bcrypt import Bcrypt
 from flask_login import LoginManager, current_user, logout_user, login_user, UserMixin, login_required
 import forms
+import secrets
+from PIL import Image
+from flask_admin import Admin
+from flask_admin.contrib.sqla import ModelView
+
+
+class ManoModelView(ModelView):
+    def is_accessible(self):
+        return current_user.is_authenticated and current_user.el_pastas == "valio@valio.lt"
+
+
+def save_picture(form_picture):
+    random_hex = secrets.token_hex(8)
+    _, f_ext = os.path.splitext(form_picture.filename)
+    picture_fn = random_hex + f_ext
+    picture_path = os.path.join(
+        app.root_path, 'static/profilio_nuotraukos', picture_fn)
+
+    output_size = (225, 225)
+    i = Image.open(form_picture)
+    i.thumbnail(output_size)
+    i.save(picture_path)
+
+    return picture_fn
+
 
 basedir = os.path.abspath(os.path.dirname(__file__))
 app = Flask(__name__)
@@ -25,8 +50,24 @@ class Vartotojas(db.Model, UserMixin):
     vardas = db.Column("Vardas", db.String(20), unique=True, nullable=False)
     el_pastas = db.Column("El. pašto adresas", db.String(
         120), unique=True, nullable=False)
+    nuotrauka = db.Column(db.String(20), nullable=False, default='default.jpg')
     slaptazodis = db.Column("Slaptažodis", db.String(
         60), unique=True, nullable=False)
+    data_records = db.relationship(
+        'DataRecord', backref='Vartotojas', lazy=True)
+
+
+class DataRecord(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    expenses_name = db.Column("Išlaidų pav.", db.String(20))
+    cost = db.Column("Suma", db.Integer())
+    user_id = db.Column(db.Integer, db.ForeignKey(
+        'vartotojas.id'), nullable=False)
+
+
+admin = Admin(app)
+# admin.add_view(ModelView(Irasas, db.session))
+admin.add_view(ManoModelView(Vartotojas, db.session))
 
 
 @login_manager.user_loader
@@ -93,16 +134,46 @@ def atsijungti():
     return redirect(url_for('index'))
 
 
-@app.route("/paskyra")
+@app.route("/paskyra", methods=['GET', 'POST'])
 @login_required
 def paskyra():
-    return render_template('paskyra.html', title='Paskyra')
+    form = forms.PaskyrosAtnaujinimoForma()
+    if form.validate_on_submit():
+        if form.nuotrauka.data:
+            nuotrauka = save_picture(form.nuotrauka.data)
+            current_user.nuotrauka = nuotrauka
+        current_user.vardas = form.vardas.data
+        current_user.el_pastas = form.el_pastas.data
+        db.session.commit()
+        flash('Tavo paskyra atnaujinta!', 'success')
+        return redirect(url_for('paskyra'))
+    elif request.method == 'GET':
+        form.vardas.data = current_user.vardas
+        form.el_pastas.data = current_user.el_pastas
+    nuotrauka = url_for(
+        'static', filename='profilio_nuotraukos/' + current_user.nuotrauka)
+    return render_template('paskyra.html', title='Account', form=form, nuotrauka=nuotrauka)
 
 
-@app.route("/irasai")
-@login_required
-def irasai():
-    return render_template('irasai.html', title='Įrašai')
+# @app.route("/irasai")
+# @login_required
+# def irasai():
+#     return render_template('irasai.html', title='Įrašai')
+
+@app.route('/irasai', methods=['GET', 'POST'])
+def add_record():
+    form = forms.DataRecordForm()
+    if form.validate_on_submit():
+        data_record = DataRecord(
+            expenses_name=form.expenses_name.data,
+            cost=form.cost.data,
+            user_id=current_user.id
+        )
+        db.session.add(data_record)
+        db.session.commit()
+        flash("Įrašas sukurtas sėkmingai.")
+        return redirect(url_for("paskyra"))
+    return render_template('irasai.html', form=form)
 
 
 @app.route("/")
